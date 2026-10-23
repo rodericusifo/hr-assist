@@ -1,0 +1,29 @@
+// Copyright 2025 Rodericus Ifo Krista
+// SPDX-License-Identifier: MIT
+
+package author
+
+import (
+	"errors"
+
+	"author-service/internal/domain/model/database/sql"
+)
+
+func (r *AuthorDatabaseSQLRepository) SaveAuthor(payload *sql.Author) error {
+	author := new(sql.Author)
+
+	q := r.Writer()
+	if q == nil {
+		return errors.New("database sql writer is not configured")
+	}
+
+	if payload != nil {
+		author = payload
+	}
+
+	if err := q.Table(r.model.TableName()).Save(author).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
