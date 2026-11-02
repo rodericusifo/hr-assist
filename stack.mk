@@ -1,4 +1,4 @@
 WORKLOAD :=
 MESSAGING :=
-CACHE := 
+CACHE :=
 DATABASE_SQL := postgres
