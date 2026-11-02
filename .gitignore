@@ -18,6 +18,7 @@
 *.csr
 *.pem
 *.srl
+*.toml
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
@@ -30,3 +31,16 @@ archive/
 
 # macOS
 .DS_Store
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual Environment directories
+.venv/
+venv/
+ENV/

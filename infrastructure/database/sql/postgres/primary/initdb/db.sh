@@ -5,8 +5,5 @@
 set -e
 
 psql -v ON_ERROR_STOP=1 -U ${POSTGRES_USER} <<-EOSQL
-    CREATE DATABASE auth_service_db;
-    CREATE DATABASE author_service_db;
-    CREATE DATABASE category_service_db;
-    CREATE DATABASE book_service_db;
+    CREATE DATABASE hr_assist;
 EOSQL

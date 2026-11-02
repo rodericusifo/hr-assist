@@ -1,4 +1,4 @@
-WORKLOAD := auth-service author-service category-service book-service api-gateway
-MESSAGING := redpanda lavinmq
-CACHE := redis
+WORKLOAD :=
+MESSAGING :=
+CACHE := 
 DATABASE_SQL := postgres
