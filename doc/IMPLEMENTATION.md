@@ -22,6 +22,9 @@ must end with its exit criteria validated before the next phase begins.
 
 **Goal:** Run PostgreSQL and Qdrant locally and verify the first 100 resumes.
 
+**Required scope:** Complete the infrastructure, schema, parser, checkpointing,
+and first-100 validation. Full-dataset ingestion is continued on Day 2.
+
 - [ ] Start PostgreSQL and Qdrant with Docker Compose.
 - [ ] Create the PostgreSQL `resumes` table with JSONB `parsed_data`.
 - [ ] Create the Qdrant `resumes` collection with 1536-dimensional vectors.
@@ -39,6 +42,12 @@ must end with its exit criteria validated before the next phase begins.
 ## Day 2: Full dataset ingestion
 
 **Goal:** Index all resumes in PostgreSQL and Qdrant with resumable processing.
+
+**Timebox fallback:** If the complete dataset cannot be processed within the
+five-day project timebox, complete and validate a representative sample,
+document the unprocessed records and remaining effort, and treat full-dataset
+completion as a stretch goal. The supervisor-worker demo must remain runnable
+with the validated sample.
 
 - [ ] Scale ingestion to the complete dataset using bounded batches.
 - [ ] Normalize dates, skill names, whitespace, and HTML artifacts.
@@ -105,6 +114,8 @@ workflow defined in the architecture.
 - [ ] Measure P50/P95 latency and validate the target response time.
 - [ ] Test empty results, malformed input, long responses, and special
   characters.
+- [ ] Test event-stream reconnection, sequence resumption, and duplicate-event
+  handling.
 - [ ] Prepare a demo script with representative recruiter workflows.
 - [ ] Remove temporary data and verify final ingestion statistics.
 
