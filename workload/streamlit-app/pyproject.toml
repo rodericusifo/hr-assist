@@ -20,6 +20,7 @@ dependencies = [
     "pydantic-settings>=2.16.1",
     "qdrant-client>=1.15.0",
     "python-dotenv>=1.2.4",
+    "sqlalchemy>=2.0.0",
     "streamlit>=1.66.1",
 ]
 

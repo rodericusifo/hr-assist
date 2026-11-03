@@ -13,7 +13,7 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.sche
     LLM
 )
 
-class Services:
+class ServicesMixin:
     def registerServices(self: DomainRegistry) -> None:
         llm = LLM(
             parser=ChatOpenAI(
@@ -24,8 +24,10 @@ class Services:
             ),
         )
         qdrant_langchain_vector_database_resume_repository = self._components["repository.resume.database.vector.langchain.qdrant"]
+        sql_alchemy_database_resume_repository = self._components["repository.resume.database.sql.sqlalchemy"]
         langgraph_resume_service = LanggraphResumeService(
             llm=llm,
             vector_database_resume_repository=qdrant_langchain_vector_database_resume_repository,
+            sql_database_resume_repository=sql_alchemy_database_resume_repository,
         )
         self._components["service.resume.langgraph"] = langgraph_resume_service

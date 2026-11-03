@@ -28,6 +28,12 @@ infrastructure/
 │           │   ├── config/
 │           │   └── initdb/
 │           └── replica/config/
+├── database/
+│   └── vector/
+│       ├── Makefile
+│       └── qdrant/
+│           ├── docker-compose.yaml
+│           └── env/.env.example
 └── messaging/
     ├── Makefile
     ├── redpanda/
@@ -45,6 +51,7 @@ infrastructure/
 | --- | --- | --- |
 | SQL database | `postgres` | PostgreSQL primary and a disposable streaming replica |
 | Cache | `redis` | Redis primary and replica |
+| Vector database | `qdrant` | Three-node Qdrant cluster for local development |
 | Messaging | `redpanda` | Three Redpanda brokers, Console, and RustFS |
 | Messaging | `lavinmq` | Three LavinMQ nodes and etcd |
 
@@ -68,6 +75,7 @@ validate selections before invoking Docker Compose:
 
 - `infrastructure/database/sql/Makefile` currently supports `postgres`.
 - `infrastructure/cache/Makefile` currently supports `redis`.
+- `infrastructure/database/vector/Makefile` currently supports `qdrant`.
 - `infrastructure/messaging/Makefile` currently supports `redpanda` and
   `lavinmq`.
 
@@ -99,6 +107,9 @@ DATABASE_SQL_POSTGRES_TIME_ZONE=UTC
 # Redis
 CACHE_REDIS_USERNAME=
 CACHE_REDIS_PASSWORD=
+
+# Qdrant
+# No credentials are required by the local development stack.
 
 # LavinMQ
 MESSAGING_LAVINMQ_MAIN_DEFAULT_USER=
@@ -179,6 +190,10 @@ The current Compose files publish these host ports:
 | PostgreSQL replica | `5434` | Replica database |
 | Redis primary | `6380` | Primary cache |
 | Redis replica | `6381` | Replica cache |
+| Qdrant node 0 | `6333`, `6334` | HTTP and gRPC APIs |
+| Qdrant node 1 | `6335`, `6336` | HTTP and gRPC APIs |
+| Qdrant node 2 | `6337`, `6338` | HTTP and gRPC APIs |
+| Qdrant router | `6339` | HAProxy HTTP endpoint with node failover |
 | Redpanda broker 0 | `19092`, `18081`, `18082`, `19644` | Kafka, Schema Registry, HTTP Proxy, Admin API |
 | Redpanda brokers 1–2 | `29092`/`39092` and related API ports | Additional broker endpoints |
 | Redpanda Console | `8080` | Web console |
@@ -187,6 +202,17 @@ The current Compose files publish these host ports:
 
 Internal workload connections should use the service names and container ports
 defined in Compose, not the host-published ports.
+
+Qdrant uses a distributed cluster rather than a primary/replica topology like
+PostgreSQL or Redis. The local stack starts `qdrant-0`, `qdrant-1`, and
+`qdrant-2` with separate persistent volumes, plus an HAProxy router that
+removes unhealthy nodes from the application endpoint. Create collections
+with a replication factor greater than one to replicate vector data. The
+vector Makefile creates the `resumes` collection with 1536-dimensional
+vectors, `replication_factor: 2`, and three shards after the cluster starts.
+Use `http://qdrant-router:6333` from a container on the shared network, or
+`http://localhost:6339` from the host. Connect applications to the router,
+not directly to an individual Qdrant node.
 
 ## 💾 Persistence and Safety
 

@@ -7,3 +7,7 @@ class IResumeService(Protocol):
 class IVectorDatabaseResumeRepository(Protocol):
     def embed_and_store_records(self, records: list[dict]) -> None:
         """Embed and store records in the vector database."""
+
+class ISQLDatabaseResumeRepository(Protocol):
+    def store_records(self, records: list[dict]) -> None:
+        """Store records in the SQL database."""

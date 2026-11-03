@@ -2,3 +2,4 @@ WORKLOAD :=
 MESSAGING :=
 CACHE :=
 DATABASE_SQL := postgres
+VECTOR := qdrant

@@ -19,7 +19,15 @@ services:
       - ./primary/archive:/mnt/server/archive
       - ./primary/config:/etc/postgresql
       - ./primary/initdb:/docker-entrypoint-initdb.d
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    command:
+      - bash
+      - -c
+      - >
+        chown -R postgres:postgres /var/lib/postgresql/data &&
+        chmod 0700 /var/lib/postgresql/data &&
+        chown -R postgres:postgres /mnt/server/archive &&
+        chmod 0770 /mnt/server/archive &&
+        exec /usr/local/bin/docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf
     networks:
       - backend
     healthcheck:

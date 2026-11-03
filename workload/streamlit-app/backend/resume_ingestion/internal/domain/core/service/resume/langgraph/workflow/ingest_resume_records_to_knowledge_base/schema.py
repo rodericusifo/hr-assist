@@ -19,6 +19,7 @@ class IngestResumeRecordsToKnowledgeBaseWorkflowContext(BaseModel):
 class IngestResumeRecordsToKnowledgeBaseWorkflowState(BaseModel):
     provider: str | None = None
     file_path: str | None = None
+    starting_record_id: str | None = None
     last_processed_record_id: str | None = None
     extracted_records: list[dict[str, Any]] | None = None
     transform_cleaned_records: list[dict[str, Any]] | None = None

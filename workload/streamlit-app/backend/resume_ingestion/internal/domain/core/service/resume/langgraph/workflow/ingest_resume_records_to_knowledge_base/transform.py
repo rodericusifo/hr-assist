@@ -12,13 +12,14 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 
 import pandas as pd
+from openai import APIError
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.runtime import Runtime
 from pydantic import ValidationError
 
-from backend.resume_ingestion.internal.domain.model.resume.workflow.parsed_resume import (
+from backend.resume_ingestion.internal.domain.model.workflow.parsed_resume import (
     ParsedResume,
 )
 from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
@@ -103,7 +104,12 @@ class TransformMixin:
         """Transform extracted resume records into structured data using an LLM parser."""
         if runtime.context.llm.parser is None:
             raise RuntimeError("An LLM parser is required to parse resumes")
-        TransformMixin.llm_parser_structured = runtime.context.llm.parser.with_structured_output(ParsedResume)
+        TransformMixin.llm_parser_structured = (
+            runtime.context.llm.parser.with_structured_output(
+                ParsedResume,
+                method="function_calling",
+            )
+        )
 
         if state.transform_cleaned_records is None:
             raise ValueError("Cannot transform enrich before cleaning resume records")
@@ -239,6 +245,10 @@ class TransformMixin:
                 return TransformMixin._coerce_parsed(response)
             except httpx.RequestError as error:
                 last_error = f"LLM network error: {error}"
+                if attempt < TransformMixin.MAX_PARSE_ATTEMPTS_PER_RECORD:
+                    time.sleep(TransformMixin.RETRY_BACKOFF_SECONDS * attempt)
+            except APIError as error:
+                last_error = f"LLM provider error: {error}"
                 if attempt < TransformMixin.MAX_PARSE_ATTEMPTS_PER_RECORD:
                     time.sleep(TransformMixin.RETRY_BACKOFF_SECONDS * attempt)
             except json.JSONDecodeError as error:
