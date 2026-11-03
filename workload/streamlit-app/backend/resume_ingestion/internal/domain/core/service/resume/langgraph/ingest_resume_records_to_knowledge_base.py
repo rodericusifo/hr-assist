@@ -61,14 +61,19 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                     (lock_key,),
                 )
                 try:
-                    thread_id, source_id = await self._get_or_create_run(
+                    source_id = await self._get_or_create_source(
                         pool,
-                        lifecycle_key,
+                        provider,
+                        source_key,
                     )
-                    state.starting_record_id = await self._get_last_processed_record_id(
+                    (
+                        thread_id,
+                        starting_record_id,
+                    ) = await self._get_or_create_run(
                         pool,
                         source_id,
                     )
+                    state.starting_record_id = starting_record_id
                     await self._set_run_status(
                         pool,
                         thread_id,
@@ -174,67 +179,42 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
     @staticmethod
     async def _get_or_create_run(
         pool: AsyncConnectionPool,
-        lifecycle_key: tuple[str, str],
-    ) -> tuple[str, int]:
-        provider, file_path = lifecycle_key
+        source_id: int,
+    ) -> tuple[str, str | None]:
         initial_thread_id = f"thread-{uuid4()}"
         async with pool.connection() as connection:
-            await connection.execute(
-                """
-                INSERT INTO ingestion_sources (xid, provider, file_path)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (provider, file_path)
-                DO NOTHING
-                """,
-                (uuid4(), provider, file_path),
-            )
-            cursor = await connection.execute(
-                """
-                SELECT id
-                FROM ingestion_sources
-                WHERE provider = %s AND file_path = %s
-                """,
-                (provider, file_path),
-            )
-            source_row = await cursor.fetchone()
-            if source_row is None:
-                raise RuntimeError("Failed to load resume ingestion run state")
-            source_id = int(source_row[0])
             cursor = await connection.execute(
                 """
                 SELECT
                     thread_id,
                     status,
-                    COALESCE(last_processed_record_id, starting_record_id)
-                        AS resume_record_id
-                FROM ingestion_runs
-                WHERE ingestion_source_id = %s AND is_current
+                    COALESCE(
+                        last_processed_record_id,
+                        starting_record_id,
+                        (
+                            SELECT COALESCE(
+                                previous_run.last_processed_record_id,
+                                previous_run.starting_record_id
+                            )
+                            FROM ingestion_runs AS previous_run
+                            WHERE previous_run.ingestion_source_id =
+                                current_run.ingestion_source_id
+                              AND previous_run.is_current = FALSE
+                              AND (
+                                  previous_run.last_processed_record_id IS NOT NULL
+                                  OR previous_run.starting_record_id IS NOT NULL
+                              )
+                            ORDER BY previous_run.updated_at DESC, previous_run.id DESC
+                            LIMIT 1
+                        )
+                    ) AS resume_record_id
+                FROM ingestion_runs AS current_run
+                WHERE current_run.ingestion_source_id = %s
+                  AND current_run.is_current
                 """,
                 (source_id,),
             )
             row = await cursor.fetchone()
-            if row is not None and row[2] is None:
-                cursor = await connection.execute(
-                    """
-                    SELECT COALESCE(
-                        last_processed_record_id,
-                        starting_record_id
-                    )
-                    FROM ingestion_runs
-                    WHERE ingestion_source_id = %s
-                      AND is_current = FALSE
-                      AND (
-                          last_processed_record_id IS NOT NULL
-                          OR starting_record_id IS NOT NULL
-                      )
-                    ORDER BY updated_at DESC, id DESC
-                    LIMIT 1
-                    """,
-                    (source_id,),
-                )
-                previous_cursor = await cursor.fetchone()
-                if previous_cursor is not None:
-                    row = (row[0], row[1], previous_cursor[0])
             if row is None:
                 cursor = await connection.execute(
                     """
@@ -252,6 +232,7 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                     (source_id, uuid4(), initial_thread_id),
                 )
                 row = await cursor.fetchone()
+                resume_record_id = None
             elif row[1] == "failed":
                 await connection.execute(
                     """
@@ -271,7 +252,9 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                     """,
                     (row[2], source_id),
                 )
+                resume_record_id = row[2]
             elif row[1] == "succeeded":
+                resume_record_id = row[2]
                 await connection.execute(
                     """
                     UPDATE ingestion_runs
@@ -300,10 +283,50 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                     (source_id, uuid4(), initial_thread_id, row[2], None),
                 )
                 row = await cursor.fetchone()
+            elif row[1] != "running":
+                raise RuntimeError(
+                    f"Unsupported ingestion run status: {row[1]!r}"
+                )
+            else:
+                resume_record_id = row[2]
             if row is None:
                 raise RuntimeError("Failed to create ingestion run")
             await connection.commit()
-            return str(row[0]), source_id
+            return str(row[0]), (
+                str(resume_record_id)
+                if resume_record_id is not None
+                else None
+            )
+
+    @staticmethod
+    async def _get_or_create_source(
+        pool: AsyncConnectionPool,
+        provider: str,
+        file_path: str,
+    ) -> int:
+        async with pool.connection() as connection:
+            await connection.execute(
+                """
+                INSERT INTO ingestion_sources (xid, provider, file_path)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (provider, file_path)
+                DO NOTHING
+                """,
+                (uuid4(), provider, file_path),
+            )
+            cursor = await connection.execute(
+                """
+                SELECT id
+                FROM ingestion_sources
+                WHERE provider = %s AND file_path = %s
+                """,
+                (provider, file_path),
+            )
+            source_row = await cursor.fetchone()
+            if source_row is None:
+                raise RuntimeError("Failed to load resume ingestion source")
+            await connection.commit()
+            return int(source_row[0])
 
     @staticmethod
     async def _set_run_status(
@@ -368,45 +391,6 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                 ),
             )
             await connection.commit()
-
-    @staticmethod
-    async def _get_last_processed_record_id(
-        pool: AsyncConnectionPool,
-        source_id: int,
-    ) -> str | None:
-        async with pool.connection() as connection:
-            cursor = await connection.execute(
-                """
-                SELECT starting_record_id
-                FROM ingestion_runs
-                WHERE ingestion_source_id = %s AND is_current
-                """,
-                (source_id,),
-            )
-            row = await cursor.fetchone()
-            if row is None:
-                raise RuntimeError("Failed to load resume ingestion cursor")
-            await connection.commit()
-            return str(row[0]) if row[0] is not None else None
-
-    @staticmethod
-    def _last_processed_record_id(snapshot: object) -> str | None:
-        records = getattr(snapshot, "extracted_records", None)
-        if records is None and isinstance(snapshot, dict):
-            records = snapshot.get("extracted_records")
-        if not isinstance(records, list) or not records:
-            return None
-        last_record = records[-1]
-        if not isinstance(last_record, dict) or last_record.get("ID") is None:
-            return None
-        return str(last_record["ID"])
-
-    @staticmethod
-    def _chunk_records(snapshot: object) -> list[dict]:
-        records = getattr(snapshot, "transform_chunked_records", None)
-        if records is None and isinstance(snapshot, dict):
-            records = snapshot.get("transform_chunked_records")
-        return records if isinstance(records, list) else []
 
     @classmethod
     def _ui_projection(

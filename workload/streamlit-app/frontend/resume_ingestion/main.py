@@ -71,13 +71,56 @@ async def _initialize_database(connection_string: str) -> None:
                 progress_stage TEXT,
                 progress_value DOUBLE PRECISION,
                 progress_message TEXT,
-                status TEXT NOT NULL DEFAULT 'running',
+                status TEXT NOT NULL DEFAULT 'running'
+                    CONSTRAINT ingestion_runs_status_check
+                    CHECK (
+                        status IN (
+                            'running',
+                            'failed',
+                            'succeeded'
+                        )
+                    ),
                 error TEXT,
                 is_current BOOLEAN NOT NULL DEFAULT TRUE,
                 started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (ingestion_source_id, thread_id)
             )
+            """
+        )
+        await connection.execute(
+            """
+            UPDATE ingestion_runs
+            SET status = 'running'
+            WHERE status = 'pending'
+            """
+        )
+        await connection.execute(
+            """
+            ALTER TABLE ingestion_runs
+            ALTER COLUMN status SET DEFAULT 'running'
+            """
+        )
+        await connection.execute(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conrelid = 'ingestion_runs'::regclass
+                      AND conname = 'ingestion_runs_status_check'
+                ) THEN
+                    ALTER TABLE ingestion_runs
+                    DROP CONSTRAINT ingestion_runs_status_check;
+                END IF;
+                ALTER TABLE ingestion_runs
+                ADD CONSTRAINT ingestion_runs_status_check
+                CHECK (
+                    status IN ('running', 'failed', 'succeeded')
+                );
+            END
+            $$
             """
         )
         await connection.execute(
@@ -513,7 +556,10 @@ run_clicked = run_column.button(
     run_label,
     type="primary",
     width="stretch",
-    disabled=bool(current_status and current_status["status"] == "running"),
+    disabled=bool(
+        current_status
+        and current_status["status"] == "running"
+    ),
 )
 
 if run_clicked:

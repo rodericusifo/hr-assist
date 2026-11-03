@@ -111,12 +111,16 @@ class ResumeIngestionTests(unittest.TestCase):
         self.assertNotIn("Resume_str", projection)
         self.assertNotIn("chunk", projection)
 
-    def test_last_processed_id_comes_from_last_extracted_record(self) -> None:
+    def test_load_returns_last_processed_id_from_last_extracted_record(
+        self,
+    ) -> None:
+        state = IngestResumeRecordsToKnowledgeBaseWorkflowState(
+            extracted_records=[{"ID": 3}, {"ID": 8}],
+        )
+
         self.assertEqual(
-            IngestResumeRecordsToKnowledgeBaseMixin._last_processed_record_id(
-                {"extracted_records": [{"ID": 3}, {"ID": 8}]}
-            ),
-            "8",
+            LoadMixin._last_processed_record_update(state),
+            {"last_processed_record_id": "8"},
         )
 
     def test_vector_repository_stores_chunk_documents(self) -> None:
