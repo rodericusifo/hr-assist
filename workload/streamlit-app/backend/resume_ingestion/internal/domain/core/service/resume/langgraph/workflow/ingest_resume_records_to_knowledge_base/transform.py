@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.workflow.ingest_resume_records_to_knowledge_base.init import IngestResumeRecordsToKnowledgeBaseWorkflow
+    from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.init import IngestResumeRecordsToKnowledgeBaseWorkflow
 
 import hashlib
 import json
@@ -18,10 +18,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.runtime import Runtime
 from pydantic import ValidationError
 
-from backend.resume_ingestion.internal.domain.model.workflow.parsed_resume import (
+from backend.resume_ingestion.internal.domain.model.resume.workflow.parsed_resume import (
     ParsedResume,
 )
-from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
     IngestResumeRecordsToKnowledgeBaseWorkflowState,
     IngestResumeRecordsToKnowledgeBaseWorkflowContext,
 )

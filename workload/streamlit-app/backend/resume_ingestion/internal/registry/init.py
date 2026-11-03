@@ -1,9 +1,11 @@
 from backend.resume_ingestion.internal.registry.services import Services
+from backend.resume_ingestion.internal.registry.repositories import Repositories
 
-class DomainRegistry(Services):
+class DomainRegistry(Services, Repositories):
     def __init__(self):
         self._components = {}
 
+        self.registerRepositories()
         self.registerServices()
 
     def get(self, name: str) -> type:

@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.schema import (
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.schema import (
     LLM
 )
 
@@ -19,6 +19,7 @@ class IngestResumeRecordsToKnowledgeBaseWorkflowContext(BaseModel):
 class IngestResumeRecordsToKnowledgeBaseWorkflowState(BaseModel):
     provider: str | None = None
     file_path: str | None = None
+    last_processed_record_id: str | None = None
     extracted_records: list[dict[str, Any]] | None = None
     transform_cleaned_records: list[dict[str, Any]] | None = None
     transform_enriched_records: list[dict[str, Any]] | None = None

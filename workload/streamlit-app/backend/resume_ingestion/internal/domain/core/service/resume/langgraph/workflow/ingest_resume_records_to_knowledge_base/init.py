@@ -4,21 +4,37 @@ from langgraph.types import Command, RetryPolicy
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
     IngestResumeRecordsToKnowledgeBaseWorkflowContext,
     IngestResumeRecordsToKnowledgeBaseWorkflowState,
 )
 
-from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.workflow.ingest_resume_records_to_knowledge_base.extract import (
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.extract import (
     ExtractMixin,
 )
-from backend.resume_ingestion.internal.domain.core.resume.service.langgraph.workflow.ingest_resume_records_to_knowledge_base.transform import (
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.transform import (
     TransformMixin,
+)
+from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.load import (
+    LoadMixin,
+)
+from backend.resume_ingestion.internal.pkg.interface.resume import (
+    IVectorDatabaseResumeRepository,
 )
 
 
-class IngestResumeRecordsToKnowledgeBaseWorkflow(ExtractMixin, TransformMixin):
-    def __init__(self):
+class IngestResumeRecordsToKnowledgeBaseWorkflow(
+    ExtractMixin,
+    TransformMixin,
+    LoadMixin,
+):
+    def __init__(
+        self,
+        vector_database_resume_repository: IVectorDatabaseResumeRepository | None = None,
+    ):
+        self._vector_database_resume_repository = (
+            vector_database_resume_repository
+        )
         graph = StateGraph(
             state_schema=IngestResumeRecordsToKnowledgeBaseWorkflowState,
             context_schema=IngestResumeRecordsToKnowledgeBaseWorkflowContext
@@ -33,13 +49,15 @@ class IngestResumeRecordsToKnowledgeBaseWorkflow(ExtractMixin, TransformMixin):
         graph.add_node("transform_clean", self.transform_clean)
         graph.add_node("transform_enrich", self.transform_enrich)
         graph.add_node("transform_chunk", self.transform_chunk)
+        graph.add_node("load", self.load)
         graph.add_node("finalize", self.finalize)
 
         graph.add_edge(START, "extract")
         graph.add_edge("extract", "transform_clean")
         graph.add_edge("transform_clean", "transform_enrich")
         graph.add_edge("transform_enrich", "transform_chunk")
-        graph.add_edge("transform_chunk", END)
+        graph.add_edge("transform_chunk", "load")
+        graph.add_edge("load", END)
 
         self._graph = graph
 
