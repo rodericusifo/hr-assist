@@ -29,7 +29,7 @@ dist/
 # Docker Mounted Volumes directories
 archive/
 
-# macOS
+# OS generated files
 .DS_Store
 
 # Python cache and compiled files
