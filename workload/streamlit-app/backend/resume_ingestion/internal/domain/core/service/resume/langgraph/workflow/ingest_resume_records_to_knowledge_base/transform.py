@@ -102,17 +102,18 @@ class TransformMixin:
 
     def transform_enrich(self: IngestResumeRecordsToKnowledgeBaseWorkflow, state: IngestResumeRecordsToKnowledgeBaseWorkflowState, runtime: Runtime[IngestResumeRecordsToKnowledgeBaseWorkflowContext]) -> IngestResumeRecordsToKnowledgeBaseWorkflowState:
         """Transform extracted resume records into structured data using an LLM parser."""
-        if runtime.context.llm.parser is None:
-            raise RuntimeError("An LLM parser is required to parse resumes")
-        TransformMixin.llm_parser_structured = (
-            runtime.context.llm.parser.with_structured_output(
-                ParsedResume,
-                method="function_calling",
-            )
-        )
-
         if state.transform_cleaned_records is None:
             raise ValueError("Cannot transform enrich before cleaning resume records")
+
+        if state.parsing_mode:
+            if runtime.context.llm.parser is None:
+                raise RuntimeError("An LLM parser is required to parse resumes")
+            TransformMixin.llm_parser_structured = (
+                runtime.context.llm.parser.with_structured_output(
+                    ParsedResume,
+                    method="function_calling",
+                )
+            )
 
         records = state.transform_cleaned_records
         if not isinstance(records, list):
@@ -136,10 +137,14 @@ class TransformMixin:
         parsed_records = []
         for record in unprocessed_records:
             resume_id = record["ID"]
-            resume_text = record["Resume_str"]
+            if state.parsing_mode:
+                resume_text = record["Resume_str"]
+                metadata = self._parse_record(resume_text, resume_id)
+            else:
+                metadata = {}
             enriched_record = {
                 **record,
-                "metadata": self._parse_record(resume_text, resume_id),
+                "metadata": metadata,
             }
             parsed_records.append(enriched_record)
 

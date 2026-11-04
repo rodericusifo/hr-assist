@@ -32,6 +32,7 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
         provider: str,
         file_path: str,
         max_records_to_extract: int,
+        parsing_mode: bool = False,
     ) -> AsyncGenerator[dict, None]:
         if max_records_to_extract < 1:
             raise ValueError("The number of records to ingest must be at least 1")
@@ -75,6 +76,7 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                             file_path=file_path,
                             last_processed_record_id=last_processed_record_id,
                             max_records_to_extract=max_records_to_extract,
+                            parsing_mode=parsing_mode,
                         )
                     )
                     context = IngestResumeRecordsToKnowledgeBaseWorkflowContext(

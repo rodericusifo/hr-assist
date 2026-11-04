@@ -259,6 +259,7 @@ async def _ingest(
     provider: str,
     file_path: str,
     max_records_to_extract: int,
+    parsing_mode: bool,
     progress: Any,
     event_log: Any,
 ) -> None:
@@ -272,6 +273,7 @@ async def _ingest(
         provider=provider,
         file_path=file_path,
         max_records_to_extract=max_records_to_extract,
+        parsing_mode=parsing_mode,
     )
     async for event in events:
         data = event.get("data", {})
@@ -443,8 +445,14 @@ if not is_retry:
         step=1,
         help="Sets the maximum number of new records processed by one ingestion run.",
     )
+    parsing_mode = st.checkbox(
+        "Enable LLM parsing",
+        value=False,
+        help="Parse resume text into structured fields using an LLM. Disable for faster ingestion without enrichment.",
+    )
 else:
     max_records_to_extract = 10
+    parsing_mode = False
 
 if current_status:
     status_value = current_status["status"]
@@ -490,6 +498,7 @@ if run_clicked:
                     provider,
                     file_path,
                     int(max_records_to_extract),
+                    parsing_mode,
                     progress,
                     event_log,
                 )

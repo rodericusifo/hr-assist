@@ -14,6 +14,7 @@ class IngestResumeRecordsToKnowledgeBaseWorkflowContext(BaseModel):
     llm: LLM | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    parsing_mode: bool = False
 
 class IngestResumeRecordsToKnowledgeBaseWorkflowState(BaseModel):
     provider: str | None = None
