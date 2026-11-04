@@ -49,7 +49,7 @@ class ResumeIngestionTests(unittest.TestCase):
                     [1, 2],
                 )
 
-    def test_extract_starts_after_starting_record_id(self) -> None:
+    def test_extract_starts_after_last_processed_record_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resumes.csv"
             path.write_text(
@@ -58,7 +58,7 @@ class ResumeIngestionTests(unittest.TestCase):
             state = IngestResumeRecordsToKnowledgeBaseWorkflowState(
                 provider="file",
                 file_path=str(path),
-                starting_record_id="1",
+                last_processed_record_id="1",
             )
 
             result = ExtractMixin().extract(

@@ -1,16 +1,15 @@
 
 from __future__ import annotations
-import asyncio
-from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
-from uuid import uuid4
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.init import (
         LanggraphResumeService,
     )
 
+import asyncio
+from pathlib import Path
+from typing import AsyncGenerator
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from psycopg_pool import AsyncConnectionPool
 
 from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
     IngestResumeRecordsToKnowledgeBaseWorkflowContext,
@@ -19,9 +18,11 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.work
 from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.init import (
     IngestResumeRecordsToKnowledgeBaseWorkflow,
 )
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from backend.resume_ingestion.internal.pkg.config.config_database_sql import (
     database_sql_connection_string,
-    database_sql_pool,
 )
 from backend.resume_ingestion.internal.pkg.constant.dialect import Dialect
 
@@ -30,21 +31,10 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
         self: LanggraphResumeService,
         provider: str,
         file_path: str,
-        max_records_to_extract: int = 10,
+        max_records_to_extract: int,
     ) -> AsyncGenerator[dict, None]:
         if max_records_to_extract < 1:
             raise ValueError("The number of records to ingest must be at least 1")
-        provider = provider.strip().lower()
-        state = IngestResumeRecordsToKnowledgeBaseWorkflowState(
-            provider=provider,
-            file_path=file_path,
-        )
-        context = IngestResumeRecordsToKnowledgeBaseWorkflowContext(
-            llm=self._llm,
-            max_records_to_extract=max_records_to_extract,
-            chunk_size=1200,
-            chunk_overlap=180
-        )
 
         connection_string = database_sql_connection_string(Dialect.POSTGRES)
         source_key = (
@@ -54,29 +44,46 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
         )
         lifecycle_key = (provider, source_key)
         lock_key = f"{lifecycle_key[0]}:{lifecycle_key[1]}"
-        async with database_sql_pool(Dialect.POSTGRES) as pool:
-            async with pool.connection() as lock_connection:
+        lock_engine = create_async_engine(
+            database_sql_connection_string(Dialect.POSTGRES).replace(
+                "postgresql://", "postgresql+asyncpg://", 1
+            )
+        )
+        try:
+            async with lock_engine.begin() as lock_connection:
                 await lock_connection.execute(
-                    "SELECT pg_advisory_lock(hashtextextended(%s, 0))",
-                    (lock_key,),
+                    text("SELECT pg_advisory_lock(hashtextextended(:key, 0))"),
+                    {"key": lock_key},
                 )
                 try:
-                    source_id = await self._get_or_create_source(
-                        pool,
+                    source_id = await self._sql_database_ingestion_source_repository.get_or_create(
                         provider,
                         source_key,
                     )
-                    (
-                        thread_id,
-                        starting_record_id,
-                    ) = await self._get_or_create_run(
-                        pool,
+                    xid, last_processed_record_id, is_retry = await self._sql_database_ingestion_run_repository.get_or_create(
                         source_id,
                     )
-                    state.starting_record_id = starting_record_id
-                    await self._set_run_status(
-                        pool,
-                        thread_id,
+                    # Build state inside lock session
+                    # Always provide initial state with provider and file_path.
+                    # For retries, LangGraph restores additional state from checkpoint.
+                    # For new/resumed runs, we explicitly set last_processed_record_id.
+                    state = (
+                        None
+                        if is_retry
+                        else IngestResumeRecordsToKnowledgeBaseWorkflowState(
+                            provider=provider,
+                            file_path=file_path,
+                            last_processed_record_id=last_processed_record_id,
+                            max_records_to_extract=max_records_to_extract,
+                        )
+                    )
+                    context = IngestResumeRecordsToKnowledgeBaseWorkflowContext(
+                        llm=self._llm,
+                        chunk_size=1200,
+                        chunk_overlap=180,
+                    )
+                    await self._sql_database_ingestion_run_repository.set_status(
+                        xid,
                         "running",
                         None,
                     )
@@ -92,9 +99,11 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                                     self._sql_database_resume_repository
                                 ),
                             ).compile(checkpointer=checkpointer)
+                            # For retries, pass None to restore full state from checkpoint.
+                            # For new/resumed runs, provide initial state.
                             stream = await workflow.astream_events(
                                 state,
-                                config={"configurable": {"thread_id": thread_id}},
+                                config={"configurable": {"thread_id": xid}},
                                 context=context,
                                 version="v3",
                             )
@@ -108,9 +117,8 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                                 )
                                 last_snapshot = snapshot
                                 projection = self._ui_projection(snapshot)
-                                await self._set_run_progress(
-                                    pool,
-                                    thread_id,
+                                await self._sql_database_ingestion_run_repository.set_progress(
+                                    xid,
                                     projection,
                                 )
                                 yield {
@@ -118,37 +126,32 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                                     "data": projection,
                                 }
                         except (GeneratorExit, asyncio.CancelledError):
-                            await self._set_run_status(
-                                pool,
-                                thread_id,
+                            await self._sql_database_ingestion_run_repository.set_status(
+                                xid,
                                 "failed",
                                 "Ingestion was interrupted before completion",
                             )
                             raise
                         except Exception as error:
-                            await self._set_run_status(
-                                pool,
-                                thread_id,
+                            await self._sql_database_ingestion_run_repository.set_status(
+                                xid,
                                 "failed",
                                 str(error),
                             )
                             raise
                         if workflow_failed:
-                            await self._set_run_status(
-                                pool,
-                                thread_id,
+                            await self._sql_database_ingestion_run_repository.set_status(
+                                xid,
                                 "failed",
                                 "Workflow completed with an error",
                             )
                         else:
-                            await self._set_run_progress(
-                                pool,
-                                thread_id,
+                            await self._sql_database_ingestion_run_repository.set_progress(
+                                xid,
                                 {"stage": "complete"},
                             )
-                            await self._set_run_status(
-                                pool,
-                                thread_id,
+                            await self._sql_database_ingestion_run_repository.set_status(
+                                xid,
                                 "succeeded",
                                 None,
                             )
@@ -162,9 +165,8 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                 except (GeneratorExit, asyncio.CancelledError):
                     raise
                 except Exception as error:
-                    await self._set_run_status(
-                        pool,
-                        thread_id,
+                    await self._sql_database_ingestion_run_repository.set_status(
+                        xid,
                         "failed",
                         str(error),
                     )
@@ -172,225 +174,11 @@ class IngestResumeRecordsToKnowledgeBaseMixin:
                 finally:
                     if not lock_connection.closed:
                         await lock_connection.execute(
-                            "SELECT pg_advisory_unlock(hashtextextended(%s, 0))",
-                            (lock_key,),
+                            text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))"),
+                            {"key": lock_key},
                         )
-
-    @staticmethod
-    async def _get_or_create_run(
-        pool: AsyncConnectionPool,
-        source_id: int,
-    ) -> tuple[str, str | None]:
-        initial_thread_id = f"thread-{uuid4()}"
-        async with pool.connection() as connection:
-            cursor = await connection.execute(
-                """
-                SELECT
-                    thread_id,
-                    status,
-                    COALESCE(
-                        last_processed_record_id,
-                        starting_record_id,
-                        (
-                            SELECT COALESCE(
-                                previous_run.last_processed_record_id,
-                                previous_run.starting_record_id
-                            )
-                            FROM ingestion_runs AS previous_run
-                            WHERE previous_run.ingestion_source_id =
-                                current_run.ingestion_source_id
-                              AND previous_run.is_current = FALSE
-                              AND (
-                                  previous_run.last_processed_record_id IS NOT NULL
-                                  OR previous_run.starting_record_id IS NOT NULL
-                              )
-                            ORDER BY previous_run.updated_at DESC, previous_run.id DESC
-                            LIMIT 1
-                        )
-                    ) AS resume_record_id
-                FROM ingestion_runs AS current_run
-                WHERE current_run.ingestion_source_id = %s
-                  AND current_run.is_current
-                """,
-                (source_id,),
-            )
-            row = await cursor.fetchone()
-            if row is None:
-                cursor = await connection.execute(
-                    """
-                    INSERT INTO ingestion_runs
-                        (
-                            ingestion_source_id,
-                            xid,
-                            thread_id,
-                            starting_record_id,
-                            is_current
-                        )
-                    VALUES (%s, %s, %s, NULL, TRUE)
-                    RETURNING thread_id
-                    """,
-                    (source_id, uuid4(), initial_thread_id),
-                )
-                row = await cursor.fetchone()
-                resume_record_id = None
-            elif row[1] == "failed":
-                await connection.execute(
-                    """
-                    UPDATE ingestion_runs
-                    SET status = 'running',
-                        error = NULL,
-                        starting_record_id = COALESCE(
-                            starting_record_id,
-                            %s
-                        ),
-                        progress_stage = NULL,
-                        progress_value = NULL,
-                        progress_message = NULL,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE ingestion_source_id = %s
-                      AND is_current
-                    """,
-                    (row[2], source_id),
-                )
-                resume_record_id = row[2]
-            elif row[1] == "succeeded":
-                resume_record_id = row[2]
-                await connection.execute(
-                    """
-                    UPDATE ingestion_runs
-                    SET is_current = FALSE,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE ingestion_source_id = %s
-                      AND is_current
-                    """,
-                    (source_id,),
-                )
-                cursor = await connection.execute(
-                    """
-                    INSERT INTO ingestion_runs
-                        (
-                            ingestion_source_id,
-                            xid,
-                            thread_id,
-                            starting_record_id,
-                            last_processed_record_id,
-                            status,
-                            is_current
-                        )
-                    VALUES (%s, %s, %s, %s, %s, 'running', TRUE)
-                    RETURNING thread_id
-                    """,
-                    (source_id, uuid4(), initial_thread_id, row[2], None),
-                )
-                row = await cursor.fetchone()
-            elif row[1] != "running":
-                raise RuntimeError(
-                    f"Unsupported ingestion run status: {row[1]!r}"
-                )
-            else:
-                resume_record_id = row[2]
-            if row is None:
-                raise RuntimeError("Failed to create ingestion run")
-            await connection.commit()
-            return str(row[0]), (
-                str(resume_record_id)
-                if resume_record_id is not None
-                else None
-            )
-
-    @staticmethod
-    async def _get_or_create_source(
-        pool: AsyncConnectionPool,
-        provider: str,
-        file_path: str,
-    ) -> int:
-        async with pool.connection() as connection:
-            await connection.execute(
-                """
-                INSERT INTO ingestion_sources (xid, provider, file_path)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (provider, file_path)
-                DO NOTHING
-                """,
-                (uuid4(), provider, file_path),
-            )
-            cursor = await connection.execute(
-                """
-                SELECT id
-                FROM ingestion_sources
-                WHERE provider = %s AND file_path = %s
-                """,
-                (provider, file_path),
-            )
-            source_row = await cursor.fetchone()
-            if source_row is None:
-                raise RuntimeError("Failed to load resume ingestion source")
-            await connection.commit()
-            return int(source_row[0])
-
-    @staticmethod
-    async def _set_run_status(
-        pool: AsyncConnectionPool,
-        thread_id: str,
-        status: str,
-        error: str | None,
-    ) -> None:
-        async with pool.connection() as connection:
-            await connection.execute(
-                """
-                UPDATE ingestion_runs
-                SET status = %s,
-                    error = %s,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE thread_id = %s
-                """,
-                (status, error, thread_id),
-            )
-            await connection.commit()
-
-    @staticmethod
-    async def _set_run_progress(
-        pool: AsyncConnectionPool,
-        thread_id: str,
-        projection: dict,
-    ) -> None:
-        progress_values = {
-            "extract": (0.1, "Extracting resumes"),
-            "transform_clean": (0.3, "Cleaning records"),
-            "transform_enrich": (0.5, "Enriching records"),
-            "transform_chunk": (0.7, "Creating knowledge chunks"),
-            "load": (0.9, "Loading knowledge base"),
-            "complete": (1.0, "Ingestion complete"),
-            "error": (0.0, "Workflow failed"),
-        }
-        stage = projection.get("stage", "starting")
-        value, message = progress_values.get(
-            stage,
-            (0.0, "Starting workflow"),
-        )
-        async with pool.connection() as connection:
-            await connection.execute(
-                """
-                UPDATE ingestion_runs
-                SET progress_stage = %s,
-                    progress_value = %s,
-                    progress_message = %s,
-                    last_processed_record_id = COALESCE(
-                        %s,
-                        last_processed_record_id
-                    ),
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE thread_id = %s
-                """,
-                (
-                    stage,
-                    value,
-                    message,
-                    projection.get("last_processed_record_id"),
-                    thread_id,
-                ),
-            )
-            await connection.commit()
+        finally:
+            await lock_engine.dispose()
 
     @classmethod
     def _ui_projection(

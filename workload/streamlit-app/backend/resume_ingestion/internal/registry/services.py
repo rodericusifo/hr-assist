@@ -23,11 +23,15 @@ class ServicesMixin:
                 temperature=0.0,
             ),
         )
-        qdrant_langchain_vector_database_resume_repository = self._components["repository.resume.database.vector.langchain.qdrant"]
-        sql_alchemy_database_resume_repository = self._components["repository.resume.database.sql.sqlalchemy"]
+        langchain_vector_database_resume_repository = self._components["repository.resume.database.vector.langchain"]
+        sqlalchemy_sql_database_resume_repository = self._components["repository.resume.database.sql.sqlalchemy"]
+        sqlalchemy_sql_database_ingestion_run_repository = self._components["repository.ingestion_run.database.sql.sqlalchemy"]
+        sqlalchemy_sql_database_ingestion_source_repository = self._components["repository.ingestion_source.database.sql.sqlalchemy"]
         langgraph_resume_service = LanggraphResumeService(
             llm=llm,
-            vector_database_resume_repository=qdrant_langchain_vector_database_resume_repository,
-            sql_database_resume_repository=sql_alchemy_database_resume_repository,
+            vector_database_resume_repository=langchain_vector_database_resume_repository,
+            sql_database_resume_repository=sqlalchemy_sql_database_resume_repository,
+            sql_database_ingestion_run_repository=sqlalchemy_sql_database_ingestion_run_repository,
+            sql_database_ingestion_source_repository=sqlalchemy_sql_database_ingestion_source_repository,
         )
         self._components["service.resume.langgraph"] = langgraph_resume_service

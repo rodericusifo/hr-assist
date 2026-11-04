@@ -14,9 +14,9 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.work
 class ExtractMixin:
     def extract(self: IngestResumeRecordsToKnowledgeBaseWorkflow, state: IngestResumeRecordsToKnowledgeBaseWorkflowState, runtime: Runtime[IngestResumeRecordsToKnowledgeBaseWorkflowContext]) -> IngestResumeRecordsToKnowledgeBaseWorkflowState:
         """Extract resume records from the configured provider."""
-        provider = state.provider.strip().lower() if state.provider else None
+        provider = state.provider
         file_path = state.file_path
-        starting_record_id = state.starting_record_id
+        last_processed_record_id = state.last_processed_record_id
 
         if not file_path:
             raise ValueError("Resume file path is required")
@@ -26,20 +26,20 @@ class ExtractMixin:
                 records = pd.read_csv(file_path, encoding="utf-8-sig").sort_values(
                     "ID"
                 )
-                if starting_record_id is not None:
+                if last_processed_record_id is not None:
                     try:
-                        starting_value = float(starting_record_id)
+                        starting_value = float(last_processed_record_id)
                         records = records[
                             pd.to_numeric(records["ID"], errors="coerce")
                             > starting_value
                         ]
                     except ValueError:
                         records = records[
-                            records["ID"].astype(str) > starting_record_id
+                            records["ID"].astype(str) > last_processed_record_id
                         ]
                 extracted_records = (
                     records
-                    .head(runtime.context.max_records_to_extract)
+                    .head(state.max_records_to_extract)
                     .to_dict(orient="records")
                 )
             case _:

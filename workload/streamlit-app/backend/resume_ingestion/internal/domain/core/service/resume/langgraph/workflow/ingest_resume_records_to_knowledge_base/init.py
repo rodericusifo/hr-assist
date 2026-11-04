@@ -19,8 +19,7 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.work
     LoadMixin,
 )
 from backend.resume_ingestion.internal.pkg.interface.resume import (
-    ISQLDatabaseResumeRepository,
-    IVectorDatabaseResumeRepository,
+    IResumeRepository,
 )
 
 
@@ -31,12 +30,10 @@ class IngestResumeRecordsToKnowledgeBaseWorkflow(
 ):
     def __init__(
         self,
-        vector_database_resume_repository: IVectorDatabaseResumeRepository | None = None,
-        sql_database_resume_repository: ISQLDatabaseResumeRepository | None = None,
+        vector_database_resume_repository: IResumeRepository | None = None,
+        sql_database_resume_repository: IResumeRepository | None = None,
     ):
-        self._vector_database_resume_repository = (
-            vector_database_resume_repository
-        )
+        self._vector_database_resume_repository = vector_database_resume_repository
         self._sql_database_resume_repository = sql_database_resume_repository
         graph = StateGraph(
             state_schema=IngestResumeRecordsToKnowledgeBaseWorkflowState,

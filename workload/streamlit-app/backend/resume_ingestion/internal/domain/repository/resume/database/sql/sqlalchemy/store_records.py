@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.resume_ingestion.internal.domain.model.database.sql.sqlalchemy.resumes import (
     Resume,
@@ -12,13 +12,13 @@ from backend.resume_ingestion.internal.domain.model.database.sql.sqlalchemy.resu
 
 if TYPE_CHECKING:
     from backend.resume_ingestion.internal.domain.repository.resume.database.sql.sqlalchemy.init import (
-        SQLAlchemyDatabaseResumeRepository,
+        SQLAlchemyResumeRepository,
     )
 
 
 class StoreRecordsMixin:
-    def store_records(
-        self: SQLAlchemyDatabaseResumeRepository,
+    async def store_records(
+        self: SQLAlchemyResumeRepository,
         records: list[dict[str, Any]],
     ) -> None:
         values = [self._record_values(record) for record in records]
@@ -36,9 +36,9 @@ class StoreRecordsMixin:
             set_=update_values,
         )
 
-        with sessionmaker(self._engine, class_=Session)() as session:
-            session.execute(statement)
-            session.commit()
+        async with AsyncSession(self._engine) as session:
+            await session.execute(statement)
+            await session.commit()
 
     @staticmethod
     def _record_values(record: dict[str, Any]) -> dict[str, Any]:

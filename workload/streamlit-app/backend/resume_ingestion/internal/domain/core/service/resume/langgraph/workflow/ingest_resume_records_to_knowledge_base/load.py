@@ -10,7 +10,7 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.work
 
 
 class LoadMixin:
-    def load_to_vector_db(
+    async def load_to_vector_db(
         self: IngestResumeRecordsToKnowledgeBaseWorkflow,
         state: IngestResumeRecordsToKnowledgeBaseWorkflowState,
     ) -> dict[str, Any]:
@@ -21,12 +21,12 @@ class LoadMixin:
         if state.transform_chunked_records is None:
             raise ValueError("Cannot load before chunking resume records")
 
-        self._vector_database_resume_repository.embed_and_store_records(
+        await self._vector_database_resume_repository.store_records(
             state.transform_chunked_records
         )
         return LoadMixin._last_processed_record_update(state)
 
-    def load_to_sql_db(
+    async def load_to_sql_db(
         self: IngestResumeRecordsToKnowledgeBaseWorkflow,
         state: IngestResumeRecordsToKnowledgeBaseWorkflowState,
     ) -> dict[str, Any]:
@@ -37,7 +37,7 @@ class LoadMixin:
         if state.transform_enriched_records is None:
             raise ValueError("Cannot load before enriching resume records")
 
-        self._sql_database_resume_repository.store_records(
+        await self._sql_database_resume_repository.store_records(
             state.transform_enriched_records
         )
         return {}
