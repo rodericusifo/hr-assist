@@ -4,37 +4,36 @@ from langgraph.types import Command, RetryPolicy
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.schema import (
+from .schema import (
     IngestResumeRecordsToKnowledgeBaseWorkflowContext,
     IngestResumeRecordsToKnowledgeBaseWorkflowState,
 )
-
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.extract import (
-    ExtractMixin,
-)
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.transform import (
-    TransformMixin,
-)
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.workflow.ingest_resume_records_to_knowledge_base.load import (
-    LoadMixin,
-)
+from .extract import extract
+from .transform_clean import transform_clean
+from .transform_enrich import transform_enrich
+from .transform_chunk import transform_chunk
+from .load_to_sql_db import load_to_sql_db
+from .load_to_vector_db import load_to_vector_db
 from backend.resume_ingestion.internal.pkg.interface.resume import (
-    IResumeRepository,
+    ISQLResumeRepository,
+    IVectorResumeRepository,
 )
 
+class IngestResumeRecordsToKnowledgeBaseWorkflow:
+    extract = extract
+    transform_clean = transform_clean
+    transform_enrich = transform_enrich
+    transform_chunk = transform_chunk
+    load_to_sql_db = load_to_sql_db
+    load_to_vector_db = load_to_vector_db
 
-class IngestResumeRecordsToKnowledgeBaseWorkflow(
-    ExtractMixin,
-    TransformMixin,
-    LoadMixin,
-):
     def __init__(
         self,
-        vector_database_resume_repository: IResumeRepository | None = None,
-        sql_database_resume_repository: IResumeRepository | None = None,
+        vector_resume_repository: IVectorResumeRepository | None = None,
+        sql_resume_repository: ISQLResumeRepository | None = None,
     ):
-        self._vector_database_resume_repository = vector_database_resume_repository
-        self._sql_database_resume_repository = sql_database_resume_repository
+        self._vector_resume_repository = vector_resume_repository
+        self._sql_resume_repository = sql_resume_repository
         graph = StateGraph(
             state_schema=IngestResumeRecordsToKnowledgeBaseWorkflowState,
             context_schema=IngestResumeRecordsToKnowledgeBaseWorkflowContext

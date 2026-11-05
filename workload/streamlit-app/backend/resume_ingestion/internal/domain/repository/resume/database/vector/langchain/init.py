@@ -1,10 +1,10 @@
 from langchain_core.vectorstores import VectorStore
 
-from backend.resume_ingestion.internal.domain.repository.resume.database.vector.langchain.store_records import (
-    StoreRecordsMixin,
-)
+from .embed_and_store_records import embed_and_store_records
 
-class LangchainVectorResumeRepository(StoreRecordsMixin):
+class LangchainVectorResumeRepository:
+    embed_and_store_records = embed_and_store_records
+
     def __init__(
         self,
         vector_store: VectorStore,

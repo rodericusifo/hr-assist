@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from backend.resume_ingestion.internal.registry.init import DomainRegistry
+    from .init import DomainRegistry
 
 import streamlit as st
 from langchain_openai import OpenAIEmbeddings
@@ -29,36 +29,34 @@ from backend.resume_ingestion.internal.pkg.config.config_database_sql import (
 )
 from backend.resume_ingestion.internal.pkg.constant.dialect import Dialect
 
-class RepositoriesMixin:
-    def registerRepositories(self: DomainRegistry) -> None:
-        llm = LLM(
-            embedder=OpenAIEmbeddings(
-                model="openai/text-embedding-3-small",
-                api_key=st.secrets["OPENROUTER_API_KEY"],
-                base_url=st.secrets["OPENROUTER_API_BASE"],
+def registerRepositories(self: DomainRegistry) -> None:
+    llm = LLM(
+        embedder=OpenAIEmbeddings(
+            model="openai/text-embedding-3-small",
+            api_key=st.secrets["OPENROUTER_API_KEY"],
+            base_url=st.secrets["OPENROUTER_API_BASE"],
+        ),
+    )
+    self._components["repository.resume.vector"] = LangchainVectorResumeRepository(
+        vector_store=QdrantVectorStore(
+            client=QdrantClient(
+                url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"]
             ),
+            collection_name="resumes",
+            embedding=llm.embedder,
+        ),
+    )
+    async_engine = create_async_engine(
+        database_sql_connection_string(Dialect.POSTGRES).replace(
+            "postgresql://", "postgresql+asyncpg://", 1
         )
-        langchain_vector_database_resume_repository = LangchainVectorResumeRepository(
-            vector_store=QdrantVectorStore(
-                client=QdrantClient(
-                    url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"]
-                ),
-                collection_name="resumes",
-                embedding=llm.embedder,
-            ),
-        )
-        self._components["repository.resume.database.vector.langchain"] = langchain_vector_database_resume_repository
-        async_engine = create_async_engine(
-            database_sql_connection_string(Dialect.POSTGRES).replace(
-                "postgresql://", "postgresql+asyncpg://", 1
-            )
-        )
-        self._components["repository.resume.database.sql.sqlalchemy"] = SQLAlchemyResumeRepository(
-            engine=async_engine
-        )
-        self._components["repository.ingestion_run.database.sql.sqlalchemy"] = SqlAlchemyIngestionRunRepository(
-            engine=async_engine
-        )
-        self._components["repository.ingestion_source.database.sql.sqlalchemy"] = SqlAlchemyIngestionSourceRepository(
-            engine=async_engine
-        )
+    )
+    self._components["repository.resume.sql"] = SQLAlchemyResumeRepository(
+        engine=async_engine
+    )
+    self._components["repository.ingestion_run.sql"] = SqlAlchemyIngestionRunRepository(
+        engine=async_engine
+    )
+    self._components["repository.ingestion_source.sql"] = SqlAlchemyIngestionSourceRepository(
+        engine=async_engine
+    )

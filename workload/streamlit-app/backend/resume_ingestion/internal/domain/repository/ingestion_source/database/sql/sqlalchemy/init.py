@@ -1,9 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from backend.resume_ingestion.internal.domain.repository.ingestion_source.database.sql.sqlalchemy.manage_ingestion_source import (
-    ManageIngestionRunsMixin,
+from .get_or_create import (
+    get_or_create,
 )
 
-class SqlAlchemyIngestionSourceRepository(ManageIngestionRunsMixin):
+class SqlAlchemyIngestionSourceRepository:
+    get_or_create = get_or_create
+
     def __init__(self, engine: AsyncEngine):
         self._engine = engine

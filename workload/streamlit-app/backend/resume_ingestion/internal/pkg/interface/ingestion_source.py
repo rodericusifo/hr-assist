@@ -1,6 +1,7 @@
-from typing_extensions import Protocol
+from typing_extensions import Protocol, runtime_checkable
 
-class IIngestionSourceRepository(Protocol):
+@runtime_checkable
+class ISQLIngestionSourceRepository(Protocol):
     def get_or_create(
         self,
         provider: str,

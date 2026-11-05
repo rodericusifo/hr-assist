@@ -1,7 +1,10 @@
-from backend.resume_ingestion.internal.registry.services import ServicesMixin
-from backend.resume_ingestion.internal.registry.repositories import RepositoriesMixin
+from .repositories import registerRepositories
+from .services import registerServices
 
-class DomainRegistry(ServicesMixin, RepositoriesMixin):
+class DomainRegistry:
+    registerRepositories = registerRepositories
+    registerServices = registerServices
+
     def __init__(self):
         self._components = {}
 

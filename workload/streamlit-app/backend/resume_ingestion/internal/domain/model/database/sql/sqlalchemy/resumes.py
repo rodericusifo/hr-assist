@@ -5,7 +5,8 @@ from typing import Any
 from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from backend.resume_ingestion.internal.domain.model.database.sql.sqlalchemy.base import Base
+
+from .base import Base
 
 
 class Resume(Base):

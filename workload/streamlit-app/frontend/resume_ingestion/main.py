@@ -1,9 +1,9 @@
 import asyncio
 import hashlib
+import os
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import streamlit as st
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -14,8 +14,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.init import (
-    LanggraphResumeService,
+from backend.resume_ingestion.internal.pkg.interface.resume import (
+    IResumeService,
 )
 from backend.resume_ingestion.internal.pkg.config.config_database_sql import (
     database_sql_connection_string,
@@ -155,35 +155,6 @@ async def _get_ingestion_sources(
         for row in rows
     ]
 
-
-async def _mark_interrupted_runs(connection_string: str) -> None:
-    engine = create_async_engine(
-        connection_string.replace("postgresql://", "postgresql+asyncpg://", 1)
-    )
-    async with engine.begin() as connection:
-        await connection.execute(
-            text("""
-                UPDATE ingestion_runs
-                SET status = 'failed',
-                    error = 'Ingestion was interrupted before completion',
-                    progress_stage = 'error',
-                    progress_value = 0,
-                    progress_message = 'Ingestion was interrupted before completion',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE status = 'running'
-            """)
-        )
-    await engine.dispose()
-
-
-def _mark_interrupted_ingestion_runs() -> None:
-    asyncio.run(
-        _mark_interrupted_runs(
-            database_sql_connection_string(Dialect.POSTGRES)
-        )
-    )
-
-
 def _ingestion_sources() -> list[dict[str, Any]]:
     return asyncio.run(
         _get_ingestion_sources(
@@ -264,9 +235,10 @@ async def _ingest(
     event_log: Any,
 ) -> None:
     registry = DomainRegistry()
-    service = registry.get("service.resume.langgraph")
-    if not isinstance(service, LanggraphResumeService):
-        raise RuntimeError("LanggraphResumeService is not registered in the DomainRegistry")
+    service = registry.get("service.resume")
+    assert isinstance(service, IResumeService), (
+        "service.resume is not registered in the DomainRegistry"
+    )
 
     log_entries: list[str] = []
     events = service.ingest_resume_records_to_knowledge_base(
@@ -310,6 +282,18 @@ def _store_uploaded_file(uploaded_file: Any) -> Path:
         destination.write_bytes(file_bytes)
     return destination
 
+def initialize_langsmith() -> None:
+    os.environ["LANGSMITH_API_KEY"] = st.secrets[
+        "LANGSMITH_API_KEY"
+    ]
+    os.environ["LANGSMITH_TRACING"] = st.secrets[
+        "LANGSMITH_TRACING"
+    ]
+    os.environ["LANGSMITH_PROJECT"] = st.secrets[
+        "LANGSMITH_PROJECT"
+    ]
+
+initialize_langsmith()
 
 st.set_page_config(
     page_title="Resume Ingestion",
@@ -330,7 +314,6 @@ if missing_secrets:
 
 try:
     initialize_database()
-    _mark_interrupted_ingestion_runs()
 except Exception as error:
     st.error(f"Database initialization failed: {error}")
     st.stop()

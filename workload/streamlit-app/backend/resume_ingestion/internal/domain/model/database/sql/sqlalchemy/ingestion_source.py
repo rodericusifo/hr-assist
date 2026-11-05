@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.resume_ingestion.internal.domain.model.database.sql.sqlalchemy.base import Base
+from .base import Base
 
 
 class IngestionSource(Base):

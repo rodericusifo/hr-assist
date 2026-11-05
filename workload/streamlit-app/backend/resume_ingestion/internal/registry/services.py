@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from backend.resume_ingestion.internal.registry.init import DomainRegistry
+    from .init import DomainRegistry
 
 import streamlit as st
 from langchain_openai import ChatOpenAI
@@ -13,25 +13,23 @@ from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.sche
     LLM
 )
 
-class ServicesMixin:
-    def registerServices(self: DomainRegistry) -> None:
-        llm = LLM(
-            parser=ChatOpenAI(
-                model="openai/gpt-4.1-mini",
-                api_key=st.secrets["OPENROUTER_API_KEY"],
-                base_url=st.secrets["OPENROUTER_API_BASE"],
-                temperature=0.0,
-            ),
-        )
-        langchain_vector_database_resume_repository = self._components["repository.resume.database.vector.langchain"]
-        sqlalchemy_sql_database_resume_repository = self._components["repository.resume.database.sql.sqlalchemy"]
-        sqlalchemy_sql_database_ingestion_run_repository = self._components["repository.ingestion_run.database.sql.sqlalchemy"]
-        sqlalchemy_sql_database_ingestion_source_repository = self._components["repository.ingestion_source.database.sql.sqlalchemy"]
-        langgraph_resume_service = LanggraphResumeService(
-            llm=llm,
-            vector_database_resume_repository=langchain_vector_database_resume_repository,
-            sql_database_resume_repository=sqlalchemy_sql_database_resume_repository,
-            sql_database_ingestion_run_repository=sqlalchemy_sql_database_ingestion_run_repository,
-            sql_database_ingestion_source_repository=sqlalchemy_sql_database_ingestion_source_repository,
-        )
-        self._components["service.resume.langgraph"] = langgraph_resume_service
+def registerServices(self: DomainRegistry) -> None:
+    llm = LLM(
+        parser=ChatOpenAI(
+            model="openai/gpt-4.1-mini",
+            api_key=st.secrets["OPENROUTER_API_KEY"],
+            base_url=st.secrets["OPENROUTER_API_BASE"],
+            temperature=0.0,
+        ),
+    )
+    vector_resume_repository = self._components["repository.resume.vector"]
+    sql_resume_repository = self._components["repository.resume.sql"]
+    sql_ingestion_run_repository = self._components["repository.ingestion_run.sql"]
+    sql_ingestion_source_repository = self._components["repository.ingestion_source.sql"]
+    self._components["service.resume"] = LanggraphResumeService(
+        llm=llm,
+        vector_resume_repository=vector_resume_repository,
+        sql_resume_repository=sql_resume_repository,
+        sql_ingestion_run_repository=sql_ingestion_run_repository,
+        sql_ingestion_source_repository=sql_ingestion_source_repository,
+    )

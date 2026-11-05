@@ -1,10 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from .set_status import set_status
+from .set_progress import set_progress
+from .get_or_create import get_or_create
 
-from backend.resume_ingestion.internal.domain.repository.ingestion_run.database.sql.sqlalchemy.manage_ingestion_run import (
-    ManageIngestionRunMixin,
-)
+class SqlAlchemyIngestionRunRepository:
+    set_status = set_status
+    set_progress = set_progress
+    get_or_create = get_or_create
 
-class SqlAlchemyIngestionRunRepository(ManageIngestionRunMixin):
     def __init__(self, engine: AsyncEngine):
         self._engine = engine

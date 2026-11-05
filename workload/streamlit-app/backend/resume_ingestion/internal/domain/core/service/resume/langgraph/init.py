@@ -1,28 +1,31 @@
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.schema import (
-    LLM
-)
 from backend.resume_ingestion.internal.pkg.interface.resume import (
-    IResumeRepository,
+    ISQLResumeRepository,
+    IVectorResumeRepository
 )
 from backend.resume_ingestion.internal.pkg.interface.ingestion_run import (
-    IIngestionRunRepository
+    ISQLIngestionRunRepository
 )
 from backend.resume_ingestion.internal.pkg.interface.ingestion_source import (
-    IIngestionSourceRepository
+    ISQLIngestionSourceRepository
 )
-from backend.resume_ingestion.internal.domain.core.service.resume.langgraph.ingest_resume_records_to_knowledge_base import IngestResumeRecordsToKnowledgeBaseMixin
+from .ingest_resume_records_to_knowledge_base import ingest_resume_records_to_knowledge_base
+from .schema import (
+    LLM
+)
 
-class LanggraphResumeService(IngestResumeRecordsToKnowledgeBaseMixin):
+class LanggraphResumeService:
+    ingest_resume_records_to_knowledge_base = ingest_resume_records_to_knowledge_base
+
     def __init__(
         self,
         llm: LLM | None = None,
-        vector_database_resume_repository: IResumeRepository | None = None,
-        sql_database_resume_repository: IResumeRepository | None = None,
-        sql_database_ingestion_run_repository: IIngestionRunRepository | None = None,
-        sql_database_ingestion_source_repository: IIngestionSourceRepository | None = None,
+        vector_resume_repository: IVectorResumeRepository | None = None,
+        sql_resume_repository: ISQLResumeRepository | None = None,
+        sql_ingestion_run_repository: ISQLIngestionRunRepository | None = None,
+        sql_ingestion_source_repository: ISQLIngestionSourceRepository | None = None,
     ):
         self._llm = llm
-        self._vector_database_resume_repository = vector_database_resume_repository
-        self._sql_database_resume_repository = sql_database_resume_repository
-        self._sql_database_ingestion_run_repository = sql_database_ingestion_run_repository
-        self._sql_database_ingestion_source_repository = sql_database_ingestion_source_repository
+        self._vector_resume_repository = vector_resume_repository
+        self._sql_resume_repository = sql_resume_repository
+        self._sql_ingestion_run_repository = sql_ingestion_run_repository
+        self._sql_ingestion_source_repository = sql_ingestion_source_repository
