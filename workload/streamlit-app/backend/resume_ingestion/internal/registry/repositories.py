@@ -40,7 +40,9 @@ def registerRepositories(self: DomainRegistry) -> None:
     self._components["repository.resume.vector"] = LangchainVectorResumeRepository(
         vector_store=QdrantVectorStore(
             client=QdrantClient(
-                url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"]
+                url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"],
+                api_key=st.secrets["PRIMARY_QDRANT_DATABASE_SQL_API_KEY"],
+                prefer_grpc=True,
             ),
             collection_name="resumes",
             embedding=llm.embedder,
