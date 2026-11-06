@@ -7,6 +7,7 @@ import streamlit as st
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
+from qdrant_client.http.models import VectorParams, Distance
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from backend.resume_ingestion.internal.domain.repository.resume.database.vector.langchain.schema import (
@@ -37,13 +38,22 @@ def registerRepositories(self: DomainRegistry) -> None:
             base_url=st.secrets["OPENROUTER_API_BASE"],
         ),
     )
+    qdrant_client = QdrantClient(
+        url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"],
+        api_key=st.secrets["PRIMARY_QDRANT_DATABASE_SQL_API_KEY"] if "PRIMARY_QDRANT_DATABASE_SQL_API_KEY" in st.secrets else None,
+        prefer_grpc=True,
+    )
+    if not qdrant_client.collection_exists("resumes"):
+        qdrant_client.create_collection(
+            collection_name="resumes",
+            vectors_config=VectorParams(
+                size=len(llm.embedder.embed_query("test")),
+                distance=Distance.COSINE,
+            ),
+        )
     self._components["repository.resume.vector"] = LangchainVectorResumeRepository(
         vector_store=QdrantVectorStore(
-            client=QdrantClient(
-                url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"],
-                api_key=st.secrets["PRIMARY_QDRANT_DATABASE_SQL_API_KEY"] if "PRIMARY_QDRANT_DATABASE_SQL_API_KEY" in st.secrets else None,
-                prefer_grpc=True,
-            ),
+            client=qdrant_client,
             collection_name="resumes",
             embedding=llm.embedder,
         ),
