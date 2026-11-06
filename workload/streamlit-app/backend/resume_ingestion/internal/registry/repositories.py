@@ -41,7 +41,7 @@ def registerRepositories(self: DomainRegistry) -> None:
         vector_store=QdrantVectorStore(
             client=QdrantClient(
                 url=st.secrets["PRIMARY_QDRANT_DATABASE_VECTOR_URL"],
-                api_key=st.secrets["PRIMARY_QDRANT_DATABASE_SQL_API_KEY"],
+                api_key=st.secrets["PRIMARY_QDRANT_DATABASE_SQL_API_KEY"] if "PRIMARY_QDRANT_DATABASE_SQL_API_KEY" in st.secrets else None,
                 prefer_grpc=True,
             ),
             collection_name="resumes",

@@ -40,6 +40,9 @@ def initialize_database() -> None:
     asyncio.run(
         _initialize_database(database_sql_connection_string(Dialect.POSTGRES))
     )
+    asyncio.run(
+        _mark_interrupted_runs_as_failed(database_sql_connection_string(Dialect.POSTGRES))
+    )
 
 
 async def _initialize_database(connection_string: str) -> None:
@@ -53,6 +56,21 @@ async def _initialize_database(connection_string: str) -> None:
         await conn.run_sync(Base.metadata.create_all)
     await engine.dispose()
 
+async def _mark_interrupted_runs_as_failed(connection_string: str) -> None:
+    engine = create_async_engine(
+        connection_string.replace("postgresql://", "postgresql+asyncpg://", 1)
+    )
+    async with engine.begin() as connection:
+        await connection.execute(
+            text("""
+                UPDATE ingestion_runs
+                SET status = 'failed',
+                    error = 'Ingestion was interrupted before completion',
+                    updated_at = NOW()
+                WHERE status = 'running' AND is_current = TRUE
+            """)
+        )
+    await engine.dispose()
 
 async def _get_run_status(
     connection_string: str,

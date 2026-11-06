@@ -49,7 +49,6 @@ class IngestResumeRecordsToKnowledgeBaseWorkflow:
         graph.add_node("transform_chunk", self.transform_chunk)
         graph.add_node("load_to_vector_db", self.load_to_vector_db)
         graph.add_node("load_to_sql_db", self.load_to_sql_db)
-        graph.add_node("finalize", self.finalize)
 
         graph.add_edge(START, "extract")
         graph.add_edge("extract", "transform_clean")
@@ -58,7 +57,6 @@ class IngestResumeRecordsToKnowledgeBaseWorkflow:
         graph.add_edge("transform_chunk", "load_to_vector_db")
         graph.add_edge("transform_chunk", "load_to_sql_db")
         graph.add_edge(["load_to_vector_db", "load_to_sql_db"], END)
-        graph.add_edge("finalize", END)
 
         self._graph = graph
 
@@ -77,9 +75,5 @@ class IngestResumeRecordsToKnowledgeBaseWorkflow:
                     "message": str(error.error),
                 }
             },
-            goto="finalize",
+            goto=END,
         )
-
-    def finalize(state: IngestResumeRecordsToKnowledgeBaseWorkflowState) -> IngestResumeRecordsToKnowledgeBaseWorkflowState:
-        # Finalize the workflow, perform any necessary cleanup or final actions
-        return state

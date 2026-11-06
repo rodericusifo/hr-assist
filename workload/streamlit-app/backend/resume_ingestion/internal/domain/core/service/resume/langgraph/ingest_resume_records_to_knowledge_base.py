@@ -63,31 +63,8 @@ async def ingest_resume_records_to_knowledge_base(
                 xid, last_processed_record_id, is_retry = await self._sql_ingestion_run_repository.get_or_create(
                     source_id,
                 )
-                # Build state inside lock session
-                # Always provide initial state with provider and file_path.
-                # For retries, LangGraph restores additional state from checkpoint.
-                # For new/resumed runs, we explicitly set last_processed_record_id.
-                state = (
-                    None
-                    if is_retry
-                    else IngestResumeRecordsToKnowledgeBaseWorkflowState(
-                        provider=provider,
-                        file_path=file_path,
-                        last_processed_record_id=last_processed_record_id,
-                        max_records_to_extract=max_records_to_extract,
-                        parsing_mode=parsing_mode,
-                    )
-                )
-                context = IngestResumeRecordsToKnowledgeBaseWorkflowContext(
-                    llm=self._llm,
-                    chunk_size=1200,
-                    chunk_overlap=180,
-                )
-                await self._sql_ingestion_run_repository.set_status(
-                    xid,
-                    "running",
-                    None,
-                )
+                workflow_failed = False
+                last_snapshot = None
                 async with AsyncPostgresSaver.from_conn_string(
                     connection_string
                 ) as checkpointer:
@@ -99,8 +76,11 @@ async def ingest_resume_records_to_knowledge_base(
                             self._sql_resume_repository
                         ),
                     ).compile(checkpointer=checkpointer)
-                    # For retries, pass None to restore full state from checkpoint.
-                    # For new/resumed runs, provide initial state.
+                    context = IngestResumeRecordsToKnowledgeBaseWorkflowContext(
+                        llm=self._llm,
+                        chunk_size=1200,
+                        chunk_overlap=180,
+                    )
                     config = {
                         "configurable": {
                             "thread_id": xid,
@@ -119,19 +99,43 @@ async def ingest_resume_records_to_knowledge_base(
                             "knowledge-base",
                         ],
                     }
+                    state = IngestResumeRecordsToKnowledgeBaseWorkflowState(
+                        provider=provider,
+                        file_path=file_path,
+                        last_processed_record_id=last_processed_record_id,
+                        max_records_to_extract=max_records_to_extract,
+                        parsing_mode=parsing_mode,
+                    )
+                    if is_retry:
+                        history = [
+                            snapshot
+                            async for snapshot in workflow.aget_state_history(config)
+                        ]
+                        last_not_failed_state = next(
+                            (
+                                snapshot
+                                for snapshot in history
+                                if snapshot.next
+                                and snapshot.values.get("error") is None
+                            ),
+                            None,
+                        )
+                        config = last_not_failed_state.config
+                        state = None
+                    await self._sql_ingestion_run_repository.set_status(
+                        xid,
+                        "running",
+                        None,
+                    )
                     stream = await workflow.astream_events(
                         state,
                         config=config,
                         context=context,
                         version="v3",
                     )
-
-                    workflow_failed = False
-                    last_snapshot = None
                     async for snapshot in stream.values:
                         workflow_failed = (
-                            workflow_failed
-                            or _snapshot_has_error(snapshot)
+                            workflow_failed or _snapshot_has_error(snapshot)
                         )
                         last_snapshot = snapshot
                         projection = _ui_projection(snapshot)
