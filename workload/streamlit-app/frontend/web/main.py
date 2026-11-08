@@ -44,28 +44,32 @@ if missing_secrets:
     )
     st.stop()
 
-st.set_page_config(page_title="Agent Chat", page_icon="🤖", layout="centered")
-
-# ---------- sidebar ----------
-with st.sidebar:
-    st.header("Settings")
-    debug_events = st.toggle("Show raw events", value=False)
-    if st.button("New chat", use_container_width=True):
-        st.session_state.pop("thread_id", None)
-        st.session_state.pop("history", None)
-        st.rerun()
-
-
-@st.cache_resource(show_spinner=False)
-def get_agent():
-    return DomainRegistry().get("service.main.agent")
+def _usage_text(u: dict) -> str:
+    out_details = u.get("output_token_details") or {}
+    in_details = u.get("input_token_details") or {}
+    parts = [
+        f"in {u.get('input_tokens', 0):,}",
+        f"out {u.get('output_tokens', 0):,}",
+    ]
+    if out_details.get("reasoning"):
+        parts.append(f"reasoning {out_details['reasoning']:,}")
+    if in_details.get("cache_read"):
+        parts.append(f"cache read {in_details['cache_read']:,}")
+    parts.append(f"total {u.get('total_tokens', 0):,}")
+    return "🪙 " + " · ".join(parts)
 
 
-agent = get_agent()
-st.session_state.setdefault("thread_id", str(uuid.uuid4()))
-# history: list of {"role": "user"|"assistant", "blocks": [ {type, ...}, ... ]}
-st.session_state.setdefault("history", [])
-
+def _sum_usage(usages: list[dict]) -> dict:
+    total: dict = {}
+    for u in usages:
+        for k in ("input_tokens", "output_tokens", "total_tokens"):
+            total[k] = total.get(k, 0) + (u.get(k) or 0)
+        for group in ("input_token_details", "output_token_details"):
+            for k, v in (u.get(group) or {}).items():
+                if isinstance(v, int):
+                    total.setdefault(group, {})
+                    total[group][k] = total[group].get(k, 0) + v
+    return total
 
 def _fmt(obj) -> str:
     if obj is None:
@@ -74,6 +78,18 @@ def _fmt(obj) -> str:
         return obj
     return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
 
+@st.cache_resource(show_spinner=False)
+def get_agent():
+    return DomainRegistry().get("service.main.agent")
+
+agent = get_agent()
+st.set_page_config(page_title="Recruitment Specialist Agent", page_icon="🤖", layout="centered")
+st.title("🤖 Recruitment Specialist Agent")
+# session_state survives reruns (each message) but is wiped on browser reload,
+# so every page load starts a fresh thread + empty history.
+st.session_state.setdefault("thread_id", str(uuid.uuid4()))
+# history: list of {"role": "user"|"assistant", "blocks": [ {type, ...}, ... ]}
+st.session_state.setdefault("history", [])
 
 # ---------- static rendering (history) ----------
 def render_block(block: dict):
@@ -93,14 +109,10 @@ def render_block(block: dict):
     elif kind == "error":
         st.error(block["text"])
 
-
-st.title("🤖 Agent Chat")
-
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         for b in turn["blocks"]:
             render_block(b)
-
 
 # ---------- live rendering (events) ----------
 def render_events(events) -> list[dict]:
@@ -108,12 +120,24 @@ def render_events(events) -> list[dict]:
     blocks: list[dict] = []
     ui: dict = {}     # live widgets keyed by event id
     buf: dict = {}    # accumulated text keyed by (id, channel)
-    raw = st.expander("📡 Raw events") if debug_events else None
+    usages: list[dict] = []
 
-    for ev in events:
+    # Events after which the agent goes quiet (model is thinking / about to
+    # call the next step). While waiting for the next event, show a spinner.
+    idle_after = {None, "message_start", "message_end", "tool_end"}
+    it = iter(events)
+    last = None
+
+    while True:
+        if last in idle_after:
+            with st.spinner("Thinking…", show_time=True):
+                ev = next(it, None)   # blocks here while the agent works
+        else:
+            ev = next(it, None)
+        if ev is None:
+            break
         name, d = ev["event"], ev["data"]
-        if raw is not None:
-            raw.code(f"event: {name}\ndata: {json.dumps(d, default=str)}", language="text")
+        last = name
 
         if name == "reasoning_delta":
             key = (d["id"], "reasoning")
@@ -169,10 +193,20 @@ def render_events(events) -> list[dict]:
                 if b.get("id") == d["id"]:
                     b.update(output=d["output"], error=d["error"])
 
+        elif name == "message_end":
+            if d.get("usage"):
+                usages.append(d["usage"])
+
         elif name == "error":
             msg = f"⚠️ {d['type']}: {d['message']}"
             st.error(msg)
             blocks.append({"type": "error", "text": msg})
+
+    # One line per turn, summed over all model calls (incl. after tool calls).
+    if usages:
+        total = _sum_usage(usages)
+        st.caption(_usage_text(total))
+        blocks.append({"type": "usage", "usage": total})
 
     return blocks
 
