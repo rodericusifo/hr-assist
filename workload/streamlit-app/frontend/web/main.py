@@ -83,8 +83,8 @@ def get_agent():
     return DomainRegistry().get("service.main.agent")
 
 agent = get_agent()
-st.set_page_config(page_title="Recruitment Specialist Agent", page_icon="🤖", layout="centered")
-st.title("🤖 Recruitment Specialist Agent")
+st.set_page_config(page_title="HR Assist", page_icon="🤝", layout="centered")
+st.title("🤖 HR Assist - Recruitment Specialist Agent")
 # session_state survives reruns (each message) but is wiped on browser reload,
 # so every page load starts a fresh thread + empty history.
 st.session_state.setdefault("thread_id", str(uuid.uuid4()))
