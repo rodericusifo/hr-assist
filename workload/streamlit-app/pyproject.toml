@@ -24,6 +24,8 @@ dependencies = [
     "greenlet>=3.0.0",
     "psycopg-binary>=3.2.0",
     "streamlit>=1.66.1",
+    "langchain-agent>=0.1.1",
+    "langchain-community>=0.4.2",
 ]
 
 [build-system]

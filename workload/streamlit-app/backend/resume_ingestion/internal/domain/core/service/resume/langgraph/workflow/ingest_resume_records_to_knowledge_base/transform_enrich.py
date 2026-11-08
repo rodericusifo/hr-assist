@@ -10,7 +10,6 @@ import httpx
 from collections.abc import Mapping
 
 from openai import APIError
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.runtime import Runtime
 from pydantic import ValidationError
@@ -28,30 +27,6 @@ langsmith_client = Client()
 
 llm_parser_structured: BaseChatModel | None = None
 
-# PARSE_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
-#     [
-#         (
-#             "system",
-#             "Extract structured information from this resume.\n"
-#             "Return ONLY one valid JSON object matching the schema exactly.\n"
-#             "Do not use markdown fences. Do not add extra keys.\n"
-#             "Use null, [], or {{}} when information is missing.",
-#         ),
-#         ("human", "Resume:\n{resume_text}"),
-#     ]
-# )
-# RETRY_PARSE_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
-#     [
-#         (
-#             "system",
-#             "Your previous response was invalid.\n"
-#             "Validation error: {error}\n\n"
-#             "Return ONLY corrected JSON matching the schema exactly.\n"
-#             "Do not use markdown fences. Do not add extra keys.",
-#         ),
-#         ("human", "Resume:\n{resume_text}"),
-#     ]
-# )
 RESUME_PARSER_PROMPT = langsmith_client.pull_prompt(
     "resume-parser",
 )
