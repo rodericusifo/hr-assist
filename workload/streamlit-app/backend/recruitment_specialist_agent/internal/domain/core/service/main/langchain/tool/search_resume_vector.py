@@ -5,8 +5,8 @@ from backend.recruitment_specialist_agent.internal.domain.core.service.main.lang
 @tool
 def search_resume_vector(runtime: ToolRuntime[MainAgentContext], query: str, top_k: int = 3) -> str:
     """
-    Performs semantic similarity search on candidate resume chunks using the Vector Store.
-    Returns textual excerpts, verbatim evidence, skills list, and resume_id (candidate ID)
+    Performs semantic similarity search on resume chunks using the Vector Store.
+    Returns textual excerpts, verbatim evidence, skills list, and resume_id
     matched from Qdrant metadata.
     """
     try:
@@ -17,7 +17,7 @@ def search_resume_vector(runtime: ToolRuntime[MainAgentContext], query: str, top
         docs = runtime.context.vectorstore.similarity_search(query, k=top_k)
 
         if not docs:
-            return "No candidate resumes matched the semantic search criteria."
+            return "No resumes matched the semantic search criteria."
 
         formatted_results = []
         for i, doc in enumerate(docs, 1):
